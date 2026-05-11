@@ -1,0 +1,1161 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>遅れてひっくり返るオセロ</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f0e8;
+      --ink: #202426;
+      --muted: #687173;
+      --panel: #fffdf8;
+      --panel-strong: #f8f4ec;
+      --line: #d7cfbf;
+      --green: #277557;
+      --green-dark: #18533e;
+      --green-light: #73b88e;
+      --amber: #d9902f;
+      --red: #b74c3f;
+      --shadow: 0 18px 46px rgba(46, 35, 20, .14);
+      --radius: 8px;
+      font-family: "Segoe UI", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", Meiryo, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        linear-gradient(120deg, rgba(39, 117, 87, .09), transparent 38%),
+        linear-gradient(300deg, rgba(217, 144, 47, .12), transparent 44%),
+        var(--bg);
+      color: var(--ink);
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    .app {
+      width: min(1180px, calc(100vw - 28px));
+      margin: 0 auto;
+      padding: 24px 0 28px;
+    }
+
+    header {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(26px, 4vw, 46px);
+      line-height: 1.05;
+      letter-spacing: 0;
+    }
+
+    .lead {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.65;
+      max-width: 720px;
+    }
+
+    .game {
+      display: grid;
+      grid-template-columns: minmax(310px, 1fr) 340px;
+      gap: 18px;
+      align-items: start;
+    }
+
+    .board-wrap,
+    .side {
+      background: rgba(255, 253, 248, .86);
+      border: 1px solid rgba(215, 207, 191, .9);
+      box-shadow: var(--shadow);
+      border-radius: var(--radius);
+    }
+
+    .board-wrap {
+      padding: clamp(10px, 2vw, 18px);
+    }
+
+    .status-strip {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .status-box {
+      min-height: 74px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 10px;
+      display: grid;
+      align-content: center;
+      gap: 5px;
+    }
+
+    .label {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.2;
+    }
+
+    .value {
+      font-weight: 800;
+      font-size: 18px;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+
+    .turn-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .stone-dot {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      display: inline-block;
+      border: 1px solid rgba(0, 0, 0, .18);
+      flex: 0 0 auto;
+    }
+
+    .stone-dot.black {
+      background: #151717;
+      box-shadow: inset 0 2px 4px rgba(255, 255, 255, .12);
+    }
+
+    .stone-dot.white {
+      background: #fbfaf6;
+      box-shadow: inset 0 -2px 5px rgba(0, 0, 0, .12);
+    }
+
+    .message {
+      min-height: 44px;
+      margin: 0 0 12px;
+      padding: 10px 12px;
+      border: 1px solid #dac59e;
+      border-radius: var(--radius);
+      background: #fff5dc;
+      color: #664411;
+      font-weight: 650;
+      line-height: 1.45;
+    }
+
+    .board {
+      width: min(100%, 720px);
+      aspect-ratio: 1;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      grid-template-rows: repeat(8, 1fr);
+      border: 4px solid var(--green-dark);
+      background: var(--green-dark);
+      gap: 2px;
+      border-radius: var(--radius);
+      overflow: hidden;
+      touch-action: manipulation;
+    }
+
+    .cell {
+      position: relative;
+      border: 0;
+      padding: 0;
+      background: var(--green);
+      display: grid;
+      place-items: center;
+      cursor: default;
+    }
+
+    .cell::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(90deg, rgba(255, 255, 255, .08), transparent 48%),
+        linear-gradient(0deg, rgba(0, 0, 0, .06), transparent 42%);
+      pointer-events: none;
+    }
+
+    .cell.playable {
+      cursor: pointer;
+    }
+
+    .cell.playable::before {
+      content: "";
+      width: 24%;
+      height: 24%;
+      border-radius: 50%;
+      background: rgba(255, 245, 196, .9);
+      box-shadow: 0 0 0 6px rgba(255, 245, 196, .18);
+      z-index: 1;
+    }
+
+    .stone {
+      width: 74%;
+      height: 74%;
+      border-radius: 50%;
+      z-index: 2;
+      transform: translateZ(0);
+      transition: transform .22s ease, background .22s ease, box-shadow .22s ease;
+    }
+
+    .stone.black {
+      background:
+        radial-gradient(circle at 35% 28%, rgba(255, 255, 255, .17), transparent 25%),
+        #111313;
+      box-shadow: inset 0 -8px 12px rgba(0, 0, 0, .36), 0 5px 9px rgba(0, 0, 0, .28);
+    }
+
+    .stone.white {
+      background:
+        radial-gradient(circle at 35% 28%, #fff, transparent 30%),
+        #f1eee7;
+      box-shadow: inset 0 -8px 12px rgba(0, 0, 0, .12), 0 5px 9px rgba(0, 0, 0, .22);
+    }
+
+    .stone.just-flipped {
+      animation: flip .42s ease;
+    }
+
+    @keyframes flip {
+      0% { transform: rotateY(0deg) scale(1); }
+      45% { transform: rotateY(88deg) scale(.98); }
+      100% { transform: rotateY(180deg) scale(1); }
+    }
+
+    .side {
+      padding: 16px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .panel {
+      border-top: 1px solid var(--line);
+      padding-top: 14px;
+    }
+
+    .panel:first-child {
+      border-top: 0;
+      padding-top: 0;
+    }
+
+    h2 {
+      margin: 0 0 10px;
+      font-size: 16px;
+      line-height: 1.25;
+    }
+
+    .score-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .score {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 10px;
+      background: var(--panel);
+      min-height: 74px;
+    }
+
+    .score strong {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 15px;
+    }
+
+    .score span:last-child {
+      display: block;
+      margin-top: 6px;
+      font-size: 26px;
+      font-weight: 850;
+    }
+
+    .control {
+      display: grid;
+      gap: 8px;
+    }
+
+    .online-grid {
+      display: grid;
+      gap: 8px;
+    }
+
+    .online-grid label {
+      display: grid;
+      gap: 5px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.2;
+    }
+
+    .online-grid input {
+      width: 100%;
+      height: 38px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: white;
+      color: var(--ink);
+      padding: 0 10px;
+      font-weight: 700;
+    }
+
+    .online-status {
+      min-height: 38px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel-strong);
+      padding: 9px 10px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .config-box {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .config-box summary {
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 750;
+    }
+
+    .config-box textarea {
+      width: 100%;
+      min-height: 128px;
+      resize: vertical;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 10px;
+      background: white;
+      color: var(--ink);
+      font: 12px/1.45 Consolas, "Courier New", monospace;
+    }
+
+    .control-row {
+      display: grid;
+      grid-template-columns: 44px 1fr 44px;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .control-row input {
+      width: 100%;
+      height: 38px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: white;
+      color: var(--ink);
+      text-align: center;
+      font-weight: 800;
+    }
+
+    .btn {
+      height: 38px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel);
+      color: var(--ink);
+      font-weight: 750;
+      cursor: pointer;
+    }
+
+    .btn:hover,
+    .cell.playable:hover {
+      filter: brightness(1.04);
+    }
+
+    .btn.primary {
+      background: var(--green-dark);
+      color: white;
+      border-color: var(--green-dark);
+    }
+
+    .btn.warn {
+      background: #fff2e1;
+      border-color: #e4b36d;
+      color: #6b4005;
+    }
+
+    .btn-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .note {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+      margin: 0;
+    }
+
+    .queue {
+      display: grid;
+      gap: 8px;
+      max-height: 260px;
+      overflow: auto;
+      padding-right: 2px;
+    }
+
+    .queue-item {
+      display: grid;
+      grid-template-columns: 46px 1fr;
+      gap: 9px;
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel);
+      padding: 8px;
+      min-height: 54px;
+    }
+
+    .queue-item b {
+      display: grid;
+      place-items: center;
+      min-height: 36px;
+      border-radius: 6px;
+      background: var(--panel-strong);
+      font-size: 13px;
+    }
+
+    .queue-item span {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    .empty {
+      border: 1px dashed #cbbfae;
+      border-radius: var(--radius);
+      padding: 12px;
+      color: var(--muted);
+      background: rgba(255, 255, 255, .44);
+      font-size: 13px;
+    }
+
+    footer {
+      margin-top: 14px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+      text-align: center;
+    }
+
+    @media (max-width: 860px) {
+      .app {
+        width: min(100vw - 18px, 720px);
+        padding-top: 14px;
+      }
+
+      header {
+        display: block;
+      }
+
+      .game {
+        grid-template-columns: 1fr;
+      }
+
+      .status-strip {
+        grid-template-columns: 1fr;
+      }
+
+      .side {
+        padding: 13px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header>
+      <div>
+        <h1>遅れてひっくり返るオセロ</h1>
+        <p class="lead">置いた瞬間には相手のコマを予約するだけ。指定ターン後にまとめて反転します。合法手の判定は「いま見えている盤面」で行います。</p>
+      </div>
+    </header>
+
+    <section class="game" aria-label="対人オセロ">
+      <div class="board-wrap">
+        <div class="status-strip">
+          <div class="status-box">
+            <span class="label">手番</span>
+            <strong class="value turn-pill" id="turnText"><span class="stone-dot black"></span>黒</strong>
+          </div>
+          <div class="status-box">
+            <span class="label">現在の手数</span>
+            <strong class="value" id="moveText">0</strong>
+          </div>
+          <div class="status-box">
+            <span class="label">反転まで</span>
+            <strong class="value" id="delayText">3ターン</strong>
+          </div>
+        </div>
+        <p class="message" id="message">黒から開始。光っているマスに置けます。</p>
+        <div class="board" id="board" role="grid" aria-label="オセロ盤"></div>
+      </div>
+
+      <aside class="side">
+        <section class="panel">
+          <h2>スコア</h2>
+          <div class="score-row">
+            <div class="score">
+              <strong><span class="stone-dot black"></span>黒</strong>
+              <span id="blackScore">2</span>
+            </div>
+            <div class="score">
+              <strong><span class="stone-dot white"></span>白</strong>
+              <span id="whiteScore">2</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>反転タイミング</h2>
+          <div class="control">
+            <div class="control-row">
+              <button class="btn" id="delayDown" aria-label="ターン数を減らす">-</button>
+              <input id="delayInput" type="number" min="0" max="12" value="3" inputmode="numeric" aria-label="何ターン後に反転するか">
+              <button class="btn" id="delayUp" aria-label="ターン数を増やす">+</button>
+            </div>
+            <p class="note">0なら通常のオセロ。変更後に置いた手から新しいターン数が使われます。</p>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>操作</h2>
+          <div class="btn-row">
+            <button class="btn warn" id="passButton">パス</button>
+            <button class="btn primary" id="resetButton">リセット</button>
+          </div>
+          <p class="note">合法手がない時は自動でパスします。任意パスもできます。</p>
+        </section>
+
+        <section class="panel">
+          <h2>オンライン部屋</h2>
+          <details class="config-box">
+            <summary>Firebase設定</summary>
+            <textarea id="firebaseConfigInput" spellcheck="false" aria-label="Firebase設定JSON"></textarea>
+            <button class="btn" id="saveFirebaseConfigButton">設定を保存</button>
+            <p class="note">FirebaseのWebアプリ設定を貼ります。このブラウザに保存されます。</p>
+          </details>
+          <div class="online-grid">
+            <label>部屋名
+              <input id="roomInput" type="text" maxlength="24" autocomplete="off" placeholder="例: slow-othello">
+            </label>
+            <label>パスワード
+              <input id="passwordInput" type="password" maxlength="40" autocomplete="current-password" placeholder="合言葉">
+            </label>
+            <div class="btn-row">
+              <button class="btn primary" id="createRoomButton">作成</button>
+              <button class="btn" id="joinRoomButton">参加</button>
+            </div>
+            <button class="btn warn" id="leaveRoomButton">退出</button>
+            <div class="online-status" id="onlineStatus">オフライン対戦中です。</div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>反転予約</h2>
+          <div class="queue" id="queue"></div>
+        </section>
+      </aside>
+    </section>
+
+    <footer>同じ画面で黒と白が交互に操作する対人仕様です。</footer>
+  </main>
+
+  <script type="module">
+    import { getApps, initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+    import { getDatabase, ref, get, set, onValue, off, runTransaction, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js";
+
+    const FIREBASE_CONFIG = {
+      apiKey: "",
+      authDomain: "",
+      databaseURL: "",
+      projectId: "",
+      appId: ""
+    };
+
+    const SIZE = 8;
+    const EMPTY = 0;
+    const BLACK = 1;
+    const WHITE = -1;
+    const directions = [
+      [-1, -1], [-1, 0], [-1, 1],
+      [0, -1],           [0, 1],
+      [1, -1],  [1, 0],  [1, 1]
+    ];
+
+    const state = {
+      board: [],
+      turn: BLACK,
+      move: 0,
+      delay: 3,
+      pending: [],
+      passStreak: 0,
+      gameOver: false,
+      flippedThisTurn: new Set()
+    };
+
+    const online = {
+      connected: false,
+      room: "",
+      password: "",
+      clientId: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
+      player: null,
+      roomId: "",
+      roomRef: null,
+      applyingRemote: false
+    };
+
+    const firebase = {
+      app: null,
+      db: null,
+      ready: false
+    };
+
+    const els = {
+      board: document.getElementById("board"),
+      turnText: document.getElementById("turnText"),
+      moveText: document.getElementById("moveText"),
+      delayText: document.getElementById("delayText"),
+      message: document.getElementById("message"),
+      blackScore: document.getElementById("blackScore"),
+      whiteScore: document.getElementById("whiteScore"),
+      delayInput: document.getElementById("delayInput"),
+      delayDown: document.getElementById("delayDown"),
+      delayUp: document.getElementById("delayUp"),
+      resetButton: document.getElementById("resetButton"),
+      passButton: document.getElementById("passButton"),
+      queue: document.getElementById("queue"),
+      roomInput: document.getElementById("roomInput"),
+      passwordInput: document.getElementById("passwordInput"),
+      createRoomButton: document.getElementById("createRoomButton"),
+      joinRoomButton: document.getElementById("joinRoomButton"),
+      leaveRoomButton: document.getElementById("leaveRoomButton"),
+      onlineStatus: document.getElementById("onlineStatus"),
+      firebaseConfigInput: document.getElementById("firebaseConfigInput"),
+      saveFirebaseConfigButton: document.getElementById("saveFirebaseConfigButton")
+    };
+
+    function colorName(color) {
+      return color === BLACK ? "黒" : "白";
+    }
+
+    function colorClass(color) {
+      return color === BLACK ? "black" : "white";
+    }
+
+    function other(color) {
+      return -color;
+    }
+
+    function canControlTurn() {
+      return !online.connected || online.player === state.turn;
+    }
+
+    function onlineRoleText() {
+      if (!online.connected) return "オフライン";
+      if (online.player === BLACK) return "黒";
+      if (online.player === WHITE) return "白";
+      return "観戦";
+    }
+
+    function setOnlineStatus(text) {
+      els.onlineStatus.textContent = text;
+    }
+
+    function getFirebaseConfig() {
+      const saved = localStorage.getItem("delayedOthelloFirebaseConfig");
+      if (saved) return JSON.parse(saved);
+      return FIREBASE_CONFIG;
+    }
+
+    function fillFirebaseConfigInput() {
+      els.firebaseConfigInput.value = JSON.stringify(getFirebaseConfig(), null, 2);
+    }
+
+    function parseFirebaseConfig(text) {
+      try {
+        return JSON.parse(text);
+      } catch {
+        const objectText = text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1);
+        if (!objectText) throw new Error("Firebase設定が見つかりません。");
+        return Function(`"use strict"; return (${objectText});`)();
+      }
+    }
+
+    function saveFirebaseConfig() {
+      try {
+        const config = parseFirebaseConfig(els.firebaseConfigInput.value);
+        localStorage.setItem("delayedOthelloFirebaseConfig", JSON.stringify(config));
+        firebase.app = null;
+        firebase.db = null;
+        firebase.ready = false;
+        setOnlineStatus("Firebase設定を保存しました。");
+      } catch {
+        setOnlineStatus("Firebase設定のJSONを確認してください。");
+      }
+    }
+
+    function initFirebase() {
+      if (firebase.ready) return;
+      const config = getFirebaseConfig();
+      if (!config.apiKey || !config.databaseURL || !config.projectId || !config.appId) {
+        throw new Error("Firebase設定を貼って保存してください。");
+      }
+      firebase.app = getApps()[0] || initializeApp(config);
+      firebase.db = getDatabase(firebase.app);
+      firebase.ready = true;
+    }
+
+    async function sha256Hex(text) {
+      const bytes = new TextEncoder().encode(text);
+      const hash = await crypto.subtle.digest("SHA-256", bytes);
+      return [...new Uint8Array(hash)].map(byte => byte.toString(16).padStart(2, "0")).join("");
+    }
+
+    function snapshotState() {
+      return {
+        board: state.board,
+        turn: state.turn,
+        move: state.move,
+        delay: state.delay,
+        pending: state.pending,
+        passStreak: state.passStreak,
+        gameOver: state.gameOver,
+        message: els.message.textContent
+      };
+    }
+
+    function applySnapshot(snapshot) {
+      if (!snapshot) return;
+      online.applyingRemote = true;
+      state.board = snapshot.board;
+      state.turn = snapshot.turn;
+      state.move = snapshot.move;
+      state.delay = snapshot.delay;
+      state.pending = snapshot.pending || [];
+      state.passStreak = snapshot.passStreak || 0;
+      state.gameOver = Boolean(snapshot.gameOver);
+      state.flippedThisTurn = new Set();
+      els.delayInput.value = String(state.delay);
+      els.message.textContent = snapshot.message || `${colorName(state.turn)}の番です。`;
+      render();
+      online.applyingRemote = false;
+    }
+
+    async function syncOnline(message = "") {
+      if (!online.connected || online.applyingRemote) return;
+      try {
+        await runTransaction(online.roomRef, room => {
+          if (!room) return room;
+          room.snapshot = snapshotState();
+          room.message = message;
+          room.updatedAt = Date.now();
+          room.version = (room.version || 0) + 1;
+          return room;
+        });
+        setOnlineStatus(`${online.room} に接続中。あなたは${onlineRoleText()}です。`);
+      } catch (error) {
+        setOnlineStatus(error.message);
+      }
+    }
+
+    async function enterRoom(mode) {
+      const room = els.roomInput.value.trim();
+      const password = els.passwordInput.value;
+      if (!room || !password) {
+        setOnlineStatus("部屋名とパスワードを入力してください。");
+        return;
+      }
+
+      try {
+        initFirebase();
+        const roomId = await sha256Hex(`delayed-othello:${room}:${password}`);
+        const roomRef = ref(firebase.db, `delayedOthelloRooms/${roomId}`);
+        const existing = (await get(roomRef)).val();
+
+        if (mode === "create") {
+          if (existing) throw new Error("同じ部屋名とパスワードの部屋がすでにあります。");
+          await set(roomRef, {
+            meta: {
+              roomName: room,
+              createdAt: serverTimestamp(),
+              updatedAt: Date.now()
+            },
+            players: {
+              black: online.clientId,
+              white: ""
+            },
+            version: 1,
+            message: "部屋を作成しました。",
+            snapshot: snapshotState()
+          });
+          online.player = BLACK;
+        } else {
+          if (!existing) throw new Error("部屋が見つかりません。先に作成してもらってください。");
+          const result = await runTransaction(roomRef, current => {
+            if (!current) return current;
+            current.players = current.players || {};
+            if (!current.players.white && current.players.black !== online.clientId) {
+              current.players.white = online.clientId;
+              current.version = (current.version || 0) + 1;
+              current.meta = current.meta || {};
+              current.meta.updatedAt = Date.now();
+            }
+            return current;
+          });
+          const current = result.snapshot.val();
+          if (current.players.black === online.clientId) {
+            online.player = BLACK;
+          } else if (current.players.white === online.clientId) {
+            online.player = WHITE;
+          } else {
+            online.player = null;
+          }
+          applySnapshot(current.snapshot);
+        }
+
+        if (online.roomRef) off(online.roomRef);
+        online.connected = true;
+        online.room = room;
+        online.password = password;
+        online.roomId = roomId;
+        online.roomRef = roomRef;
+
+        onValue(roomRef, snapshot => {
+          const data = snapshot.val();
+          if (!data) {
+            leaveRoom("部屋が削除されました。");
+            return;
+          }
+          if (data.snapshot) applySnapshot(data.snapshot);
+          const players = data.players || {};
+          const playerText = `黒${players.black ? "あり" : "待ち"} / 白${players.white ? "あり" : "待ち"}`;
+          setOnlineStatus(`${online.room} に接続中。あなたは${onlineRoleText()}です。${playerText}`);
+        });
+
+        setOnlineStatus(`${room} に接続しました。あなたは${onlineRoleText()}です。`);
+        render();
+      } catch (error) {
+        setOnlineStatus(error.message);
+      }
+    }
+
+    function leaveRoom(message = "オフライン対戦中です。") {
+      if (online.roomRef) off(online.roomRef);
+      online.connected = false;
+      online.room = "";
+      online.password = "";
+      online.player = null;
+      online.roomId = "";
+      online.roomRef = null;
+      setOnlineStatus(message);
+      render();
+    }
+
+    function inBounds(row, col) {
+      return row >= 0 && row < SIZE && col >= 0 && col < SIZE;
+    }
+
+    function cellName(row, col) {
+      return `${String.fromCharCode(65 + col)}${row + 1}`;
+    }
+
+    function createBoard() {
+      const board = Array.from({ length: SIZE }, () => Array(SIZE).fill(EMPTY));
+      board[3][3] = WHITE;
+      board[3][4] = BLACK;
+      board[4][3] = BLACK;
+      board[4][4] = WHITE;
+      return board;
+    }
+
+    function getFlips(row, col, color, board = state.board) {
+      if (!inBounds(row, col) || board[row][col] !== EMPTY) return [];
+      const flips = [];
+
+      for (const [dr, dc] of directions) {
+        const line = [];
+        let r = row + dr;
+        let c = col + dc;
+
+        while (inBounds(r, c) && board[r][c] === other(color)) {
+          line.push([r, c]);
+          r += dr;
+          c += dc;
+        }
+
+        if (line.length && inBounds(r, c) && board[r][c] === color) {
+          flips.push(...line);
+        }
+      }
+
+      return flips;
+    }
+
+    function legalMoves(color = state.turn) {
+      const moves = [];
+      for (let row = 0; row < SIZE; row += 1) {
+        for (let col = 0; col < SIZE; col += 1) {
+          const flips = getFlips(row, col, color);
+          if (flips.length) moves.push({ row, col, flips });
+        }
+      }
+      return moves;
+    }
+
+    function countStones() {
+      let black = 0;
+      let white = 0;
+      let empty = 0;
+      for (const row of state.board) {
+        for (const cell of row) {
+          if (cell === BLACK) black += 1;
+          if (cell === WHITE) white += 1;
+          if (cell === EMPTY) empty += 1;
+        }
+      }
+      return { black, white, empty };
+    }
+
+    function dueFlipsForMove(moveNumber) {
+      const due = [];
+      const waiting = [];
+
+      for (const item of state.pending) {
+        if (item.dueMove <= moveNumber) {
+          due.push(item);
+        } else {
+          waiting.push(item);
+        }
+      }
+
+      state.pending = waiting;
+
+      for (const item of due) {
+        for (const [row, col] of item.cells) {
+          if (state.board[row][col] !== EMPTY) {
+            state.board[row][col] = item.to;
+            state.flippedThisTurn.add(`${row}-${col}`);
+          }
+        }
+      }
+
+      return due;
+    }
+
+    function placeStone(row, col) {
+      if (state.gameOver) return;
+      if (!canControlTurn()) {
+        els.message.textContent = `オンライン対戦中です。${colorName(state.turn)}の相手を待っています。`;
+        return;
+      }
+
+      const flips = getFlips(row, col, state.turn);
+      if (!flips.length) return;
+
+      const player = state.turn;
+      state.board[row][col] = player;
+      state.move += 1;
+      state.passStreak = 0;
+      state.flippedThisTurn = new Set();
+
+      if (state.delay === 0) {
+        for (const [fr, fc] of flips) {
+          state.board[fr][fc] = player;
+          state.flippedThisTurn.add(`${fr}-${fc}`);
+        }
+      } else {
+        state.pending.push({
+          player,
+          to: player,
+          placedAt: state.move,
+          dueMove: state.move + state.delay,
+          origin: [row, col],
+          cells: flips
+        });
+      }
+
+      dueFlipsForMove(state.move);
+
+      state.turn = other(player);
+      advancePastBlockedTurns(`${colorName(player)}が${cellName(row, col)}に置きました。`);
+      render();
+      syncOnline(`${colorName(player)}が${cellName(row, col)}に置きました。`);
+    }
+
+    function advancePastBlockedTurns(prefix = "") {
+      if (state.gameOver) return;
+
+      let notice = prefix;
+      while (!state.gameOver && !legalMoves(state.turn).length) {
+        const counts = countStones();
+        const opponentMoves = legalMoves(other(state.turn));
+        if (counts.empty === 0 || !opponentMoves.length) {
+          finishGame(notice);
+          return;
+        }
+
+        state.passStreak += 1;
+        notice += `${notice ? " " : ""}${colorName(state.turn)}は置ける場所がないためパス。`;
+        state.turn = other(state.turn);
+
+        if (state.passStreak >= 2) {
+          finishGame(notice);
+          return;
+        }
+      }
+
+      const moves = legalMoves(state.turn);
+      if (!state.gameOver) {
+        els.message.textContent = `${notice ? notice + " " : ""}${colorName(state.turn)}の番です。置ける場所は${moves.length}か所。`;
+      }
+    }
+
+    function manualPass() {
+      if (state.gameOver) return;
+      if (!canControlTurn()) {
+        els.message.textContent = `オンライン対戦中です。${colorName(state.turn)}の相手を待っています。`;
+        return;
+      }
+      state.passStreak += 1;
+      const passed = state.turn;
+      state.turn = other(state.turn);
+      advancePastBlockedTurns(`${colorName(passed)}がパスしました。`);
+      render();
+      syncOnline(`${colorName(passed)}がパスしました。`);
+    }
+
+    function finishGame(prefix = "") {
+      state.gameOver = true;
+      const { black, white } = countStones();
+      let result = "引き分けです。";
+      if (black > white) result = "黒の勝ちです。";
+      if (white > black) result = "白の勝ちです。";
+      els.message.textContent = `${prefix ? prefix + " " : ""}ゲーム終了。${black}-${white}で${result}`;
+    }
+
+    function setDelay(value) {
+      const next = Math.max(0, Math.min(12, Number.parseInt(value, 10) || 0));
+      state.delay = next;
+      els.delayInput.value = String(next);
+      render();
+      syncOnline(`反転タイミングを${next}ターンに変更しました。`);
+    }
+
+    function renderBoard() {
+      const moves = new Map(legalMoves().map(move => [`${move.row}-${move.col}`, move]));
+      els.board.innerHTML = "";
+
+      for (let row = 0; row < SIZE; row += 1) {
+        for (let col = 0; col < SIZE; col += 1) {
+          const cell = document.createElement("button");
+          const key = `${row}-${col}`;
+          cell.className = `cell${moves.has(key) && !state.gameOver && canControlTurn() ? " playable" : ""}`;
+          cell.type = "button";
+          cell.setAttribute("role", "gridcell");
+          cell.setAttribute("aria-label", `${cellName(row, col)} ${moves.has(key) ? "置ける" : "置けない"}`);
+          cell.addEventListener("click", () => placeStone(row, col));
+
+          const value = state.board[row][col];
+          if (value !== EMPTY) {
+            const stone = document.createElement("span");
+            stone.className = `stone ${colorClass(value)}${state.flippedThisTurn.has(key) ? " just-flipped" : ""}`;
+            cell.appendChild(stone);
+          }
+
+          els.board.appendChild(cell);
+        }
+      }
+    }
+
+    function renderQueue() {
+      if (!state.pending.length) {
+        els.queue.innerHTML = `<div class="empty">予約中の反転はありません。</div>`;
+        return;
+      }
+
+      const ordered = [...state.pending].sort((a, b) => a.dueMove - b.dueMove);
+      els.queue.innerHTML = "";
+      for (const item of ordered) {
+        const wrap = document.createElement("div");
+        wrap.className = "queue-item";
+        const left = document.createElement("b");
+        const remaining = Math.max(0, item.dueMove - state.move);
+        left.textContent = `あと${remaining}`;
+        const text = document.createElement("span");
+        text.textContent = `${colorName(item.to)}が${cellName(item.origin[0], item.origin[1])}に置いた予約。${item.cells.length}個が${item.dueMove}手目に反転。`;
+        wrap.append(left, text);
+        els.queue.appendChild(wrap);
+      }
+    }
+
+    function render() {
+      const { black, white } = countStones();
+      els.blackScore.textContent = black;
+      els.whiteScore.textContent = white;
+      els.moveText.textContent = state.move;
+      els.delayText.textContent = `${state.delay}ターン`;
+      els.turnText.innerHTML = `<span class="stone-dot ${colorClass(state.turn)}"></span>${state.gameOver ? "終了" : colorName(state.turn)}`;
+      renderBoard();
+      renderQueue();
+    }
+
+    function resetGame() {
+      if (online.connected && online.player !== BLACK) {
+        setOnlineStatus("オンライン対戦のリセットは部屋を作った黒だけが使えます。");
+        return;
+      }
+      state.board = createBoard();
+      state.turn = BLACK;
+      state.move = 0;
+      state.pending = [];
+      state.passStreak = 0;
+      state.gameOver = false;
+      state.flippedThisTurn = new Set();
+      els.message.textContent = "黒から開始。光っているマスに置けます。";
+      render();
+      syncOnline("ゲームをリセットしました。");
+    }
+
+    els.delayDown.addEventListener("click", () => setDelay(state.delay - 1));
+    els.delayUp.addEventListener("click", () => setDelay(state.delay + 1));
+    els.delayInput.addEventListener("input", event => setDelay(event.target.value));
+    els.resetButton.addEventListener("click", resetGame);
+    els.passButton.addEventListener("click", manualPass);
+    els.createRoomButton.addEventListener("click", () => enterRoom("create"));
+    els.joinRoomButton.addEventListener("click", () => enterRoom("join"));
+    els.leaveRoomButton.addEventListener("click", leaveRoom);
+    els.saveFirebaseConfigButton.addEventListener("click", saveFirebaseConfig);
+
+    fillFirebaseConfigInput();
+    resetGame();
+  </script>
+</body>
+</html>
