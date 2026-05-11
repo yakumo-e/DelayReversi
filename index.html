@@ -234,6 +234,26 @@
       animation: flip .42s ease;
     }
 
+    .flip-count {
+      position: absolute;
+      right: 8%;
+      bottom: 8%;
+      z-index: 3;
+      min-width: 22px;
+      height: 22px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      border: 1px solid rgba(20, 24, 22, .28);
+      background: #ffe39a;
+      color: #312511;
+      box-shadow: 0 3px 7px rgba(0, 0, 0, .24);
+      font-size: clamp(10px, 1.8vw, 13px);
+      font-weight: 900;
+      line-height: 1;
+      pointer-events: none;
+    }
+
     @keyframes flip {
       0% { transform: rotateY(0deg) scale(1); }
       45% { transform: rotateY(88deg) scale(.98); }
@@ -1088,6 +1108,15 @@
             const stone = document.createElement("span");
             stone.className = `stone ${colorClass(value)}${state.flippedThisTurn.has(key) ? " just-flipped" : ""}`;
             cell.appendChild(stone);
+
+            const remaining = remainingTurnsForCell(row, col);
+            if (remaining !== null) {
+              const badge = document.createElement("span");
+              badge.className = "flip-count";
+              badge.textContent = remaining;
+              badge.setAttribute("aria-label", `あと${remaining}手で反転`);
+              cell.appendChild(badge);
+            }
           }
 
           els.board.appendChild(cell);
@@ -1114,6 +1143,18 @@
         wrap.append(left, text);
         els.queue.appendChild(wrap);
       }
+    }
+
+    function remainingTurnsForCell(row, col) {
+      let remaining = null;
+      for (const item of state.pending) {
+        const hasCell = item.cells.some(([r, c]) => r === row && c === col);
+        if (hasCell) {
+          const next = Math.max(0, item.dueMove - state.move);
+          remaining = remaining === null ? next : Math.min(remaining, next);
+        }
+      }
+      return remaining;
     }
 
     function render() {
